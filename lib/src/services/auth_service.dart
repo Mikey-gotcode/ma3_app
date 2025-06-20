@@ -8,6 +8,42 @@ class AuthService {
 
   // Handles HTTP POST request for user signup
   // Returns a map with 'success', 'message', 'role', and 'token' (if successful)
+   static Future<Map<String, dynamic>> _authenticatedFetch(String endpoint, {String method = 'GET', Map<String, dynamic>? body}) async {
+    final token = await TokenStorage.getToken();
+    if (token == null) {
+      return {'success': false, 'message': 'Authentication token not found.'};
+    }
+
+    final uri = Uri.parse('$_backendUrl/$endpoint');
+    http.Response response;
+    Map<String, String> headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+
+    try {
+      if (method == 'GET') {
+        response = await http.get(uri, headers: headers);
+      } else if (method == 'POST') {
+        response = await http.post(uri, headers: headers, body: jsonEncode(body));
+      } else if (method == 'PUT') {
+        response = await http.put(uri, headers: headers, body: jsonEncode(body));
+      } else if (method == 'DELETE') {
+        response = await http.delete(uri, headers: headers);
+      } else {
+        return {'success': false, 'message': 'Unsupported HTTP method: $method'};
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return {'success': true, 'data': json.decode(response.body)};
+      } else {
+        final errorData = json.decode(response.body);
+        return {'success': false, 'message': errorData['error'] ?? 'Failed to fetch data: ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error or failed to connect: $e'};
+    }
+  }
   static Future<Map<String, dynamic>> signup({
     required String name,
     required String email,
@@ -17,6 +53,7 @@ class AuthService {
     String? saccoName,
     String? saccoOwner,
     String? driverLicenseNumber,
+    int? sacco_id,
   }) async {
     if (_backendUrl == null) {
       return {'success': false, 'message': 'Backend URL not configured.'};
@@ -44,11 +81,11 @@ class AuthService {
       // Add driver-specific fields if role is 'driver'
       if (role == 'driver') {
         if (driverLicenseNumber != null) body['license_number'] = driverLicenseNumber;
-      }
 
-      // --- DEBUG PRINT ---
-      print('AuthService.signup - Request Body before JSON encoding: $body');
-      // --- END DEBUG PRINT ---
+         if (sacco_id != null) {
+          body['sacco_id'] = sacco_id;
+        }
+      }
 
       final response = await http.post(
         url,
@@ -61,9 +98,13 @@ class AuthService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final String? responseRole = responseBody['user']?['role'];
         final String? token = responseBody['token'];
+        final int? saccoId = responseBody['user']?['sacco_id']; // Extract sacco_id from response
 
         if (token != null) {
           await TokenStorage.saveToken(token);
+        }
+        if (saccoId != null) {
+          await TokenStorage.saveSaccoId(saccoId);
         }
 
         return {
@@ -80,7 +121,6 @@ class AuthService {
     }
   }
 
-  // Your existing login method
   static Future<Map<String, dynamic>> login({
     required String email,
     required String password,
@@ -107,9 +147,13 @@ class AuthService {
       if (response.statusCode == 200) {
         final String? role = responseBody['user']?['role'];
         final String? token = responseBody['token'];
+        final int? saccoId = responseBody['user']?['sacco_id']; // Extract sacco_id from response
 
         if (token != null) {
           await TokenStorage.saveToken(token);
+        }
+        if (saccoId != null) {
+          await TokenStorage.saveSaccoId(saccoId);
         }
 
         return {
@@ -124,5 +168,17 @@ class AuthService {
     } catch (e) {
       return {'success': false, 'message': 'An error occurred: $e'};
     }
+  }
+
+  // Logout method
+  static Future<void> logout() async {
+    await TokenStorage.clearAllAuthData(); // Clear token and sacco_id
+    // Optionally navigate to login screen after logout
+  }
+
+  // Moved _authenticatedFetch to AuthService as it uses backendUrl and token
+  // This makes it reusable across different services.
+  static Future<Map<String, dynamic>> authenticatedFetch(String endpoint, {String method = 'GET', Map<String, dynamic>? body}) {
+    return _authenticatedFetch(endpoint, method: method, body: body);
   }
 }

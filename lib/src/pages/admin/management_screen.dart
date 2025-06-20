@@ -162,15 +162,19 @@ class _ManagementScreenState extends State<ManagementScreen>
         )
         .toList();
 
-    _filteredDrivers = _allDrivers
-        .where(
-          (driver) =>
-              driver.name.toLowerCase().contains(lowerCaseQuery) ||
-              driver.email.toLowerCase().contains(lowerCaseQuery) ||
-              driver.licenseNumber.toLowerCase().contains(lowerCaseQuery) ||
-              (driver.phone?.toLowerCase().contains(lowerCaseQuery) ?? false),
-        )
-        .toList();
+     _filteredDrivers = _allDrivers.where((driver) {
+    // Safely check nullable String fields before calling toLowerCase()
+    // Provide an empty string if the field is null to avoid errors.
+    final driverName = driver.name.toLowerCase(); // Assuming name is always non-null
+    final driverEmail = driver.email.toLowerCase(); // Assuming email is always non-null
+    final driverLicenseNumber = driver.licenseNumber?.toLowerCase() ?? ''; // Handle nullable licenseNumber
+    final driverPhone = driver.phone?.toLowerCase() ?? ''; // Handle nullable phone
+
+    return driverName.contains(lowerCaseQuery) ||
+           driverEmail.contains(lowerCaseQuery) ||
+           driverLicenseNumber.contains(lowerCaseQuery) ||
+           driverPhone.contains(lowerCaseQuery);
+  }).toList();
 
     _filteredVehicles = _allVehicles
         .where(

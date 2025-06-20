@@ -109,6 +109,7 @@ class ManagementService {
   static Future<Map<String, dynamic>> createVehicle({
     required String vehicleNo,
     required String vehicleRegistration,
+ 
   }) async {
     if (_backendUrl == null) {
       return {'success': false, 'message': 'Backend URL not configured.'};
@@ -132,6 +133,7 @@ class ManagementService {
       final Map<String, dynamic> body = {
         'vehicle_no': vehicleNo,
         'vehicle_registration': vehicleRegistration,
+       
       };
 
       final response = await http.post(

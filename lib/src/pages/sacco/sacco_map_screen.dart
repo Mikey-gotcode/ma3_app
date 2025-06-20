@@ -1,17 +1,31 @@
 import 'package:flutter/material.dart';
 import 'dart:async'; // For Timer
-import 'dart:convert'; // For JSON decoding (if mock data is used internally)
+import 'dart:convert'; // For JSON decoding
 
-import 'package:flutter_map/flutter_map.dart'; // Import flutter_map
-import 'package:latlong2/latlong.dart'; // Import LatLng
-import 'package:latlong2/latlong.dart' as latlong; // Alias for Distance calculation
+import 'package:flutter_map/flutter_map.dart'; // Provides MapController, TileLayer, Marker, Polyline, LatLng, LatLngBounds, MapOptions, CameraFit, InteractionOptions, InteractiveFlag
+import 'package:latlong2/latlong.dart' as math_latlong; // Alias for Distance calculation and other latlong2 types to avoid conflict with flutter_map's LatLng
 
 // Import your models
-import 'package:ma3_app/src/models/vehicle.dart'; // Contains both Vehicle (for map) and ManagementVehicle
-import 'package:ma3_app/src/models/route_data.dart'; // Contains RouteData and Stage
+import 'package:ma3_app/src/models/vehicle.dart';
+import 'package:ma3_app/src/models/route_data.dart';
 
-// Import the new Sacco service
-import 'package:ma3_app/src/services/sacco_services.dart'; // Corrected import to sacco_service.dart
+// Import the Sacco service
+import 'package:ma3_app/src/services/sacco_services.dart'; // Ensure this path is correct
+import 'package:ma3_app/src/services/token_storage.dart'; // To get saccoId
+
+// Helper class to store pre-calculated route animation info
+class _RouteCalculatedInfo {
+  final List<math_latlong.LatLng> polylinePoints; // Use LatLng from flutter_map
+  final List<double> segmentLengths;
+  final double totalRouteLength;
+
+  _RouteCalculatedInfo({
+    required this.polylinePoints,
+    required this.segmentLengths,
+    required this.totalRouteLength,
+  });
+}
+
 
 class SaccoMapScreen extends StatefulWidget {
   const SaccoMapScreen({super.key});
@@ -24,77 +38,16 @@ class _SaccoMapScreenState extends State<SaccoMapScreen> with SingleTickerProvid
   late MapController _mapController;
   late AnimationController _animationController;
 
-  List<Vehicle> _vehiclesOnMap = []; // Vehicles with LatLng for map display
-  RouteData? _assignedRoute; // The route assigned to the Sacco's vehicles
-  List<LatLng> _routePolylinePoints = []; // Points to draw the route
-  List<double> _segmentLengths = []; // Lengths of each segment for path animation
-  double _totalRouteLength = 0.0;
+  List<Vehicle> _vehiclesOnMap = []; // All fetched vehicles
+  List<RouteData> _allRoutesOnMap = []; // All fetched routes
+  Map<int, RouteData> _routeIdToRouteData = {}; // Map to quickly find RouteData by ID
+  Map<int, _RouteCalculatedInfo> _routeAnimationInfo = {}; // Pre-calculated animation data per route
 
   bool _isLoading = true;
   String _errorMessage = '';
 
-  // Mock API response for a route (replace with actual route fetching if available)
-  final String _mockRouteApiResponse = '''
-{
-    "length": 7895.237178232105,
-    "route": {
-        "ID": 1,
-        "CreatedAt": "2025-05-27T20:50:22.822423+03:00",
-        "UpdatedAt": "2025-05-27T20:50:22.822423+03:00",
-        "DeletedAt": null,
-        "name": "Kiambu–CBD Parliament",
-        "description": "Main commuter route from Kiambu Town to the CBD near Parliament",
-        "sacco_id": 1,
-        "geometry": "0102000020E610000002000000545227A089684240713D0AD7A370F3BF462575029A684240BE30992A1895F4BF",
-        "stages": [
-            {
-                "ID": 1,
-                "CreatedAt": "2025-05-27T20:50:22.823448+03:00",
-                "UpdatedAt": "2025-05-27T20:50:22.823448+03:00",
-                "DeletedAt": null,
-                "name": "Kiambu Town Center",
-                "seq": 1,
-                "lat": -1.2149,
-                "lng": 36.8168,
-                "route_id": 1
-            },
-            {
-                "ID": 2,
-                "CreatedAt": "2025-05-27T20:50:22.823448+03:00",
-                "UpdatedAt": "2025-05-27T20:50:22.823448+03:00",
-                "DeletedAt": null,
-                "name": "Thika Road Mall",
-                "seq": 2,
-                "lat": -1.255,
-                "lng": 36.83,
-                "route_id": 1
-            },
-            {
-                "ID": 3,
-                "CreatedAt": "2025-05-27T20:50:22.823448+03:00",
-                "UpdatedAt": "2025-05-27T20:50:22.823448+03:00",
-                "DeletedAt": null,
-                "name": "Garden City",
-                "seq": 3,
-                "lat": -1.287,
-                "lng": 36.831,
-                "route_id": 1
-            },
-            {
-                "ID": 4,
-                "CreatedAt": "2025-05-27T20:50:22.823448+03:00",
-                "UpdatedAt": "2025-05-27T20:50:22.823448+03:00",
-                "DeletedAt": null,
-                "name": "Parliament Roundabout",
-                "seq": 4,
-                "lat": -1.2864,
-                "lng": 36.8172,
-                "route_id": 1
-            }
-        ]
-    }
-}
-  ''';
+  // Default center if no routes/vehicles are found (using flutter_map's LatLng)
+  static const math_latlong.LatLng _defaultNairobiCenter = math_latlong.LatLng(-1.286389, 36.817223);
 
   @override
   void initState() {
@@ -102,139 +55,205 @@ class _SaccoMapScreenState extends State<SaccoMapScreen> with SingleTickerProvid
     _mapController = MapController();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 30), // Duration for one full route cycle
+      duration: const Duration(seconds: 30), // Duration for one full route cycle (can be adjusted)
     )..addListener(() {
-        setState(() {
-          _updateVehiclePositions(); // Update vehicle positions on each animation tick
-        });
+        if (mounted) {
+          setState(() {
+            _updateVehiclePositions(); // Update vehicle positions on each animation tick
+          });
+        }
       })
       ..repeat(reverse: false); // Repeat animation continuously
 
-    _loadSaccoMapData(); // Load vehicles and route data
+    _loadSaccoMapData(); // Load all necessary data
   }
 
   Future<void> _loadSaccoMapData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = '';
+      _vehiclesOnMap = [];
+      _allRoutesOnMap = [];
+      _routeIdToRouteData = {};
+      _routeAnimationInfo = {};
     });
 
     try {
-      // 1. Fetch Sacco's Vehicles
-      final List<ManagementVehicle> fetchedVehicles = await SaccoService.fetchMyVehicles();
-
-      // Convert ManagementVehicle to Vehicle for map display
-      _vehiclesOnMap = fetchedVehicles.map((mv) => Vehicle(
-        id: mv.id,
-        // For now, assign a default position. In a real app, this would come from live tracking.
-        position: LatLng(0, 0), // Will be updated by animation
-        color: Colors.blue, // Default color, you might assign based on vehicle type
-        icon: Icons.directions_bus, // Default icon
-      )).toList();
-
-      // 2. Load the Route Data (mocked for now)
-      // In a real app, you'd fetch a route based on a vehicle's assigned route ID
-      final Map<String, dynamic> jsonResponse = json.decode(_mockRouteApiResponse);
-      if (jsonResponse.containsKey('error')) {
-        _errorMessage = 'API Error: ${jsonResponse['error']}';
-        _showSnackBar(_errorMessage, isError: true);
-        return;
-      }
-      final routeJson = jsonResponse['route'];
-      _assignedRoute = RouteData.fromJson(routeJson);
-
-      _routePolylinePoints = _assignedRoute!.stages.map((s) => s.toLatLng()).toList();
-
-      // Calculate segment lengths for smooth animation
-      _segmentLengths = [];
-      _totalRouteLength = 0.0;
-      if (_routePolylinePoints.length > 1) {
-        for (int i = 0; i < _routePolylinePoints.length - 1; i++) {
-          final p1 = _routePolylinePoints[i];
-          final p2 = _routePolylinePoints[i + 1];
-          final distance = const latlong.Distance().as(
-            latlong.LengthUnit.Meter,
-            p1,
-            p2,
-          );
-          _segmentLengths.add(distance);
-          _totalRouteLength += distance;
-        }
+      final int? saccoId = await TokenStorage.getSaccoId();
+      if (saccoId == null) {
+        throw Exception('Sacco ID not found. Cannot fetch data.');
       }
 
-      // Initialize vehicle positions to the start of the route
-      if (_vehiclesOnMap.isNotEmpty && _routePolylinePoints.isNotEmpty) {
-        for (var vehicle in _vehiclesOnMap) {
-          vehicle.position = _routePolylinePoints.first;
-        }
-      }
+      // 1. Fetch all Vehicles for the authenticated Sacco
+      final List<Vehicle> fetchedVehicles = await SaccoService.fetchVehiclesBySacco();
+      _vehiclesOnMap = fetchedVehicles;
 
-      // FIX: Defer fitBounds call to ensure MapController is fully initialized
-      if (_routePolylinePoints.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          // FIX: Removed hasListeners check, just check mounted
-          if (mounted) {
-            _mapController.fitCamera(
-              CameraFit.bounds(
-                bounds: LatLngBounds.fromPoints(_routePolylinePoints),
-                padding: const EdgeInsets.all(50.0),
-              ),
-            );
+
+      // 2. Fetch all Routes for the authenticated Sacco
+      final List<RouteData> fetchedRoutes = await SaccoService.fetchRoutesBySacco();
+      _allRoutesOnMap = fetchedRoutes;
+
+      // Prepare lookup map and pre-calculate animation info for each route
+      LatLngBounds? overallBounds; // Use LatLngBounds from flutter_map
+
+      for (var route in _allRoutesOnMap) {
+        _routeIdToRouteData[route.id] = route;
+
+        List<math_latlong.LatLng> polylinePoints = []; // Use LatLng from flutter_map
+        // Parse route geometry from GeoJSON string
+        if (route.geometry.isNotEmpty) {
+          try {
+            final Map<String, dynamic> geoJson = json.decode(route.geometry);
+            if (geoJson['type'] == 'LineString' && geoJson['coordinates'] is List) {
+              polylinePoints = (geoJson['coordinates'] as List)
+                  .map((coord) => math_latlong.LatLng(coord[1] as double, coord[0] as double)) // GeoJSON is [lng, lat]
+                  .toList();
+            } else {
+              debugPrint('Warning: Route ID ${route.id} geometry is not a valid LineString GeoJSON. Falling back to stages.');
+              polylinePoints = route.stages.map((s) => s.toLatLng()).toList(); // Fallback to stages
+            }
+          } catch (e) {
+            debugPrint('Error parsing geometry for route ID ${route.id} as GeoJSON: $e. Falling back to stages.');
+            polylinePoints = route.stages.map((s) => s.toLatLng()).toList(); // Fallback
           }
-        });
+        } else {
+          polylinePoints = route.stages.map((s) => s.toLatLng()).toList(); // Use stages if geometry is empty
+        }
+
+        List<double> segmentLengths = [];
+        double totalRouteLength = 0.0;
+        if (polylinePoints.length > 1) {
+          for (int i = 0; i < polylinePoints.length - 1; i++) {
+            final p1 = polylinePoints[i];
+            final p2 = polylinePoints[i + 1];
+            // Use math_latlong.Distance for calculations
+            final distance = const math_latlong.Distance().as(
+              math_latlong.LengthUnit.Meter,
+              p1,
+              p2,
+            );
+            segmentLengths.add(distance);
+            totalRouteLength += distance;
+          }
+        }
+
+        _routeAnimationInfo[route.id] = _RouteCalculatedInfo(
+          polylinePoints: polylinePoints,
+          segmentLengths: segmentLengths,
+          totalRouteLength: totalRouteLength,
+        );
+
+        // Extend overall map bounds to include all routes
+        if (polylinePoints.isNotEmpty) {
+          final routeBounds = LatLngBounds.fromPoints(polylinePoints); // Use LatLngBounds from flutter_map
+          if (overallBounds == null) {
+            overallBounds = routeBounds;
+          } else {
+            overallBounds.extend(routeBounds.northWest);
+            overallBounds.extend(routeBounds.southEast);
+          }
+        }
+      }
+
+      // Initialize vehicle positions to the start of their respective routes
+      for (var vehicle in _vehiclesOnMap) {
+        final assignedRouteInfo = _routeAnimationInfo[vehicle.routeId];
+        if (assignedRouteInfo != null && assignedRouteInfo.polylinePoints.isNotEmpty) {
+          vehicle.position = assignedRouteInfo.polylinePoints.first;
+        } else {
+          // If route not found or has no points, place vehicle at default center
+          vehicle.position = _defaultNairobiCenter;
+          debugPrint('Warning: Vehicle ${vehicle.id} has no assigned valid route or route has insufficient points. Placing at default.');
+        }
+      }
+
+      // Fit map to overall bounds of all routes/vehicles
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && overallBounds != null) {
+          _mapController.fitCamera(
+            CameraFit.bounds(
+              bounds: overallBounds!,
+              padding: const EdgeInsets.all(50.0),
+            ),
+          );
+        } else if (mounted) {
+          // If no routes, fit to default Nairobi center
+          _mapController.move(_defaultNairobiCenter, 12.0);
+        }
+      });
+
+      // Start animation if we have vehicles and routes
+      if (_vehiclesOnMap.isNotEmpty && _allRoutesOnMap.isNotEmpty) {
+        _animationController.repeat(reverse: false);
       }
 
     } catch (e) {
       _errorMessage = 'Error loading map data: $e';
-      _showSnackBar(_errorMessage, isError: true);
-      print('Error loading sacco map data: $e'); // For debugging
+      if (mounted) {
+        _showSnackBar(_errorMessage, isError: true);
+      }
+      debugPrint('Error loading sacco map data: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  // This function updates vehicle positions along the loaded route
+
+  // This function updates each vehicle's position along its assigned route
   void _updateVehiclePositions() {
-    if (_routePolylinePoints.isEmpty || _totalRouteLength == 0 || _vehiclesOnMap.isEmpty) return;
+    if (_vehiclesOnMap.isEmpty || _allRoutesOnMap.isEmpty || _animationController.value == 0) return;
 
-    final double animatedDistance = _totalRouteLength * _animationController.value;
+    // Use the single global animation controller's value
+    final double animationProgress = _animationController.value; // 0.0 to 1.0
 
-    double currentDistance = 0.0;
-    LatLng? newPosition;
+    for (var vehicle in _vehiclesOnMap) {
+      final routeInfo = _routeAnimationInfo[vehicle.routeId];
 
-    for (int i = 0; i < _routePolylinePoints.length - 1; i++) {
-      final segmentStart = _routePolylinePoints[i];
-      final segmentEnd = _routePolylinePoints[i + 1];
-      final segmentLength = _segmentLengths[i];
+      if (routeInfo != null && routeInfo.polylinePoints.length > 1) {
+        final double animatedDistance = animationProgress * routeInfo.totalRouteLength;
 
-      if (animatedDistance >= currentDistance && animatedDistance <= currentDistance + segmentLength) {
-        final double segmentProgress = (animatedDistance - currentDistance) / segmentLength;
-        newPosition = LatLng(
-          segmentStart.latitude + (segmentEnd.latitude - segmentStart.latitude) * segmentProgress,
-          segmentStart.longitude + (segmentEnd.longitude - segmentStart.longitude) * segmentProgress,
-        );
-        break;
-      }
-      currentDistance += segmentLength;
-    }
+        double accumulatedDistance = 0.0;
+        math_latlong.LatLng? newVehiclePosition; // Use LatLng from flutter_map
 
-    if (newPosition == null && _animationController.value == 1.0) {
-      newPosition = _routePolylinePoints.last;
-    }
+        for (int i = 0; i < routeInfo.polylinePoints.length - 1; i++) {
+          final segmentStart = routeInfo.polylinePoints[i];
+          final segmentEnd = routeInfo.polylinePoints[i + 1];
+          final segmentLength = routeInfo.segmentLengths[i];
 
-    if (newPosition != null) {
-      // Update all vehicles to the same position for this animation cycle.
-      // In a real system, each vehicle would have its own actual location.
-      for (var vehicle in _vehiclesOnMap) {
-        vehicle.position = newPosition;
+          if (animatedDistance >= accumulatedDistance && animatedDistance <= accumulatedDistance + segmentLength) {
+            final double segmentProgress = (animatedDistance - accumulatedDistance) / segmentLength;
+            newVehiclePosition = math_latlong.LatLng( // Use LatLng from flutter_map
+              segmentStart.latitude + (segmentEnd.latitude - segmentStart.latitude) * segmentProgress,
+              segmentStart.longitude + (segmentEnd.longitude - segmentStart.longitude) * segmentProgress,
+            );
+            break; // Found segment, break loop
+          }
+          accumulatedDistance += segmentLength;
+        }
+
+        // Handle the case where animationProgress is 1.0 (at the end of the route)
+        if (newVehiclePosition == null && animationProgress == 1.0) {
+          newVehiclePosition = routeInfo.polylinePoints.last;
+        }
+
+        if (newVehiclePosition != null) {
+          vehicle.position = newVehiclePosition;
+        }
+      } else {
+        // If no valid route, keep vehicle at its initial or default position
+        debugPrint('Vehicle ${vehicle.id} has no valid route (${vehicle.routeId}) or route has insufficient points for animation.');
       }
     }
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -277,10 +296,13 @@ class _SaccoMapScreenState extends State<SaccoMapScreen> with SingleTickerProvid
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCenter: _routePolylinePoints.isNotEmpty
-            ? _routePolylinePoints.first // Center on start of route
-            : const LatLng(-1.286389, 36.817223), // Default Nairobi CBD
-        initialZoom: 12.0,
+        // The error indicates _routePolylinePoints is "undefined" here.
+        // This is highly unusual for a class member.
+        // Let's ensure a robust fallback and confirm variable exists.
+        initialCenter: _allRoutesOnMap.isNotEmpty && _routeAnimationInfo[_allRoutesOnMap.first.id]?.polylinePoints.isNotEmpty == true
+            ? _routeAnimationInfo[_allRoutesOnMap.first.id]!.polylinePoints.first
+            : _defaultNairobiCenter,
+        initialZoom: 12.0, // Always provide a concrete initial zoom
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.all,
         ),
@@ -292,69 +314,74 @@ class _SaccoMapScreenState extends State<SaccoMapScreen> with SingleTickerProvid
           userAgentPackageName: 'com.example.ma3_app',
           retinaMode: MediaQuery.of(context).devicePixelRatio > 1.0,
         ),
-        // Draw the route polyline
-        if (_routePolylinePoints.isNotEmpty)
-          PolylineLayer(
-            polylines: [
-              Polyline(
-                points: _routePolylinePoints,
-                color: Colors.teal, // Sacco theme color
-                strokeWidth: 5.0,
-                // FIX: Corrected deprecated Color.red/green/blue access
-                borderColor: Colors.teal.withOpacity(0.5),
-                borderStrokeWidth: 2.0,
-              ),
-            ],
-          ),
-        // Draw markers for stages (waypoints)
+        // Draw all routes
+        ..._allRoutesOnMap.map((route) {
+          final routeInfo = _routeAnimationInfo[route.id];
+          if (routeInfo != null && routeInfo.polylinePoints.isNotEmpty) {
+            return PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: routeInfo.polylinePoints,
+                  color: Colors.teal.withAlpha((255 * 0.5).round()), // Lighter color for all routes
+                  strokeWidth: 3.0,
+                  borderColor: Colors.teal.withAlpha((255 * 0.3).round()),
+                  borderStrokeWidth: 1.0,
+                ),
+              ],
+            );
+          }
+          return const SizedBox.shrink(); // Return empty widget if no polyline
+        }),
+        // Draw markers for stages (waypoints) for all routes
         MarkerLayer(
           markers: [
-            ...(_assignedRoute?.stages.map((stage) {
-                  return Marker(
-                    point: stage.toLatLng(),
-                    width: 80.0,
-                    height: 80.0,
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.location_on,
-                          color: Colors.purple,
-                          size: 30.0,
-                        ),
-                        Flexible(
-                          child: Text(
-                            stage.name,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                              shadows: [
-                                Shadow(
-                                  blurRadius: 2.0,
-                                  color: Colors.white,
-                                  offset: Offset(0, 0),
-                                ),
-                              ],
-                            ),
+            ..._allRoutesOnMap.expand((route) {
+              return route.stages.map((stage) {
+                return Marker(
+                  point: stage.toLatLng(),
+                  width: 80.0,
+                  height: 80.0,
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.location_on,
+                        color: Colors.purple,
+                        size: 30.0,
+                      ),
+                      Flexible(
+                        child: Text(
+                          stage.name,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                            shadows: [
+                              Shadow(
+                                blurRadius: 2.0,
+                                color: Colors.white,
+                                offset: Offset(0, 0),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                }) ??
-                []),
+                      ),
+                    ],
+                  ),
+                );
+              });
+            }), // Removed .toList() as expand already returns Iterable and spread handles it.
             // Markers for vehicles
             ..._vehiclesOnMap.map((vehicle) {
               return Marker(
                 point: vehicle.position,
                 width: 40.0,
                 height: 40.0,
-                rotate: true, // Allow marker to rotate with vehicle direction (more advanced)
+                rotate: true,
                 child: Icon(
-                  vehicle.icon, // Use the icon from the Vehicle object
-                  color: vehicle.color, // Use the color from the Vehicle object
+                  vehicle.icon,
+                  color: vehicle.color,
                   size: 30.0,
                 ),
               );
@@ -368,7 +395,7 @@ class _SaccoMapScreenState extends State<SaccoMapScreen> with SingleTickerProvid
   @override
   void dispose() {
     _animationController.dispose();
-    _mapController.dispose(); // Dispose map controller
+    _mapController.dispose();
     super.dispose();
   }
 }
