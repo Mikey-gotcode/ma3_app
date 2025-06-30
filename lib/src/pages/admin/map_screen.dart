@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'dart:async'; // Import for Timer
-import '../../widgets/cartoon_map_painter.dart';
 import '../../models/route_data.dart';
 import 'package:flutter_map/flutter_map.dart'; // Import flutter_map
 import 'package:latlong2/latlong.dart'; // Import LatLng

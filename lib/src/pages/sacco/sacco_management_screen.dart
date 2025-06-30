@@ -140,7 +140,7 @@ class _SaccoManagementScreenState extends State<SaccoManagementScreen>
         .where(
           (route) =>
               route.name.toLowerCase().contains(lowerCaseQuery) ||
-              (route.description?.toLowerCase().contains(lowerCaseQuery) ??
+              (route.description.toLowerCase().contains(lowerCaseQuery) ??
                   false),
         )
         .toList();
@@ -450,10 +450,12 @@ class _SaccoManagementScreenState extends State<SaccoManagementScreen>
                             ),
                             keyboardType: TextInputType.number,
                             validator: (value) {
-                              if (value!.trim().isEmpty)
+                              if (value!.trim().isEmpty) {
                                 return 'Sequence number required';
-                              if (int.tryParse(value.trim()) == null)
+                              }
+                              if (int.tryParse(value.trim()) == null) {
                                 return 'Enter a valid number';
+                              }
                               return null;
                             },
                           ),
@@ -632,7 +634,7 @@ class _SaccoManagementScreenState extends State<SaccoManagementScreen>
               child: const Text('Add'),
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
-                  final int? sacco_id = await TokenStorage.getSaccoId();
+                  final int? saccoId = await TokenStorage.getSaccoId();
                   final result = await AuthService.signup(
                     name: nameController.text,
                     email: emailController.text,
@@ -640,7 +642,7 @@ class _SaccoManagementScreenState extends State<SaccoManagementScreen>
                     phone: phoneController.text,
                     role: 'driver',
                     driverLicenseNumber: licenseNumberController.text,
-                    sacco_id: sacco_id,
+                    sacco_id: saccoId,
                   );
                   if (!dialogContext.mounted) return;
                   if (result['success']) {

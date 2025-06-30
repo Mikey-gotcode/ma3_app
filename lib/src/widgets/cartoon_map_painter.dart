@@ -97,6 +97,6 @@ class CartoonMapPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
     // Only repaint if vehicles or animation value changes
     return (oldDelegate as CartoonMapPainter).vehicles != vehicles ||
-           (oldDelegate as CartoonMapPainter).animationValue != animationValue;
+           (oldDelegate).animationValue != animationValue;
   }
 }

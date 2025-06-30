@@ -55,7 +55,7 @@ class _StageLocationPickerScreenState extends State<StageLocationPickerScreen> {
   // Function to perform geocoding using OpenRouteService
   Future<void> _geocodeLocation(String locationName) async {
     if (locationName.isEmpty) return;
-    if (_orsApiKey == null || _orsApiKey!.isEmpty || _orsApiKey == 'YOUR_ORS_API_KEY') { // Corrected check
+    if (_orsApiKey == null || _orsApiKey.isEmpty || _orsApiKey == 'YOUR_ORS_API_KEY') { // Corrected check
       _showSnackBar('OpenRouteService API Key is not configured in .env file.', isError: true);
       return;
     }
@@ -138,7 +138,7 @@ class _StageLocationPickerScreenState extends State<StageLocationPickerScreen> {
     });
     _showSnackBar('Point selected. Fetching address...');
 
-    if (_orsApiKey == null || _orsApiKey!.isEmpty || _orsApiKey == 'YOUR_ORS_API_KEY') { // Corrected check
+    if (_orsApiKey == null || _orsApiKey.isEmpty || _orsApiKey == 'YOUR_ORS_API_KEY') { // Corrected check
       _showSnackBar('API Key not configured for reverse geocoding.', isError: true);
       return;
     }

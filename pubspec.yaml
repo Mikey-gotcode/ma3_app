@@ -34,12 +34,18 @@ dependencies:
   flutter_dotenv: ^5.1.0
   web_socket_channel: ^2.4.0
   flutter_map: ^6.1.0 # Add this
+  geolocator: ^12.0.0 # For location services
+  geolocator_linux: ^0.2.0 # Optional but necessary for Linux builds
   latlong2: ^0.9.1 # Add this for LatLng
   flutter_secure_storage: ^9.0.0 # Add this line
+  dbus: ^0.7.10 # For direct geoclue access
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  json_annotation: ^4.9.0
+  json_serializable: ^6.9.5
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:
@@ -51,6 +57,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  build_runner: ^2.4.14
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -29,8 +29,8 @@ class Vehicle {
     Color? color,
     this.icon = Icons.directions_car, // Default car icon
   }) : // Initialize non-nullable fields with defaults
-       this.position = position ?? const LatLng(-1.286389, 36.817223), // Default Nairobi CBD if no position given
-       this.color = color ?? (inService ? Colors.green : Colors.red); // Derive color from inService status
+       position = position ?? const LatLng(-1.286389, 36.817223), // Default Nairobi CBD if no position given
+       color = color ?? (inService ? Colors.green : Colors.red); // Derive color from inService status
 
   // Factory constructor to create a Vehicle object from a JSON map
   factory Vehicle.fromJson(Map<String, dynamic> json) {

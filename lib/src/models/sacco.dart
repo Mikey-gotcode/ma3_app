@@ -27,7 +27,7 @@ class Sacco {
   // Factory constructor to create a Sacco object from a JSON map
   factory Sacco.fromJson(Map<String, dynamic> json) {
     // Helper function to format date strings
-    String _formatDate(String? dateString) {
+    String formatDate(String? dateString) {
       if (dateString == null || dateString.isEmpty) {
         return '';
       }
@@ -52,8 +52,8 @@ class Sacco {
       // Providing a default empty string. If it's expected to be dynamic,
       // your backend would need to include it.
       registrationNumber: json['registrationNumber'] as String? ?? '',
-      createdAt: _formatDate(json['created_at'] as String?), // Format 'created_at'
-      updatedAt: _formatDate(json['updated_at'] as String?), // Format 'updated_at'
+      createdAt: formatDate(json['created_at'] as String?), // Format 'created_at'
+      updatedAt: formatDate(json['updated_at'] as String?), // Format 'updated_at'
     );
   }
 }

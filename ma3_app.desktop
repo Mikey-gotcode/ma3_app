@@ -1,0 +1,9 @@
+# ma3_app.desktop
+[Desktop Entry]
+Name=Ma3 App
+Exec=ma3_app
+Icon=ma3_icon
+Type=Application
+StartupNotify=true
+Categories=Utility;
+DBusActivatable=false

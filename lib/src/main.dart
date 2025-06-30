@@ -6,11 +6,13 @@ import '../src/pages/home/admin_home_page.dart'; // A simple home page after log
 import '../src/pages/home/commuter_home_page.dart';
 import '../src/pages/home/driver_home_page.dart';
 import '../src/pages/home/sacco_home_page.dart';
+//import 'package:geolocator/geolocator.dart';
 
 
 void main() async {
   // Ensure Flutter widgets are initialized
   WidgetsFlutterBinding.ensureInitialized();
+
   // Load the .env file
   await dotenv.load(fileName: ".env");
   runApp(const MyApp());

@@ -1,5 +1,19 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.13)
+
+# —————— Force Flutter SDK location ——————
+if(NOT DEFINED ENV{FLUTTER_ROOT})
+  message(STATUS "FLUTTER_ROOT not set; defaulting to /home/barbosa/flutter")
+  set(ENV{FLUTTER_ROOT} "/home/barbosa/flutter")
+endif()
+message(STATUS "Using FLUTTER_ROOT=$ENV{FLUTTER_ROOT}")
+
+# Engine & headers
+set(FLUTTER_ENGINE "$ENV{FLUTTER_ROOT}/bin/cache/artifacts/engine/linux-x64")
+set(FLUTTER_INCLUDE_DIR "${FLUTTER_ENGINE}/include")
+include_directories("${FLUTTER_INCLUDE_DIR}")
+# ————————————————————————————————
+
 project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change

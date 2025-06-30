@@ -106,6 +106,12 @@ class AuthService {
         if (saccoId != null) {
           await TokenStorage.saveSaccoId(saccoId);
         }
+        if (responseRole == 'driver') { // <--- NEW: Save driver ID on driver signup
+          final int? driverId = responseBody['user']?['driver']?['ID'];
+          if (driverId != null) {
+            await TokenStorage.saveDriverId(driverId);
+          }
+        }
 
         return {
           'success': true,
@@ -155,6 +161,13 @@ class AuthService {
         if (saccoId != null) {
           await TokenStorage.saveSaccoId(saccoId);
         }
+         if (role == 'driver') { // <--- NEW: Save driver ID on driver login
+          final int? driverId = responseBody['user']?['driver']?['ID'];
+          if (driverId != null) {
+            await TokenStorage.saveDriverId(driverId);
+          }
+        }
+
 
         return {
           'success': true,

@@ -4,6 +4,7 @@ class TokenStorage {
   static const _storage = FlutterSecureStorage();
   static const _tokenKey = 'jwt_token'; // Key for storing the token
   static const _saccoIdKey = 'sacco_id'; // New key for storing Sacco ID
+  static const _driverIdKey = 'driver_id'; // New key for storing Sacco ID
 
   // Saves the bearer token securely
   static Future<void> saveToken(String token) async {
@@ -29,6 +30,17 @@ class TokenStorage {
   static Future<int?> getSaccoId() async {
     final String? saccoIdStr = await _storage.read(key: _saccoIdKey);
     return saccoIdStr != null ? int.tryParse(saccoIdStr) : null;
+  }
+
+   // Saves the Sacco ID securely
+  static Future<void> saveDriverId(int driverId) async {
+    await _storage.write(key: _driverIdKey, value: driverId.toString()); // Store as string
+  }
+
+   // Retrieves the Sacco ID securely
+  static Future<int?> getDriverId() async {
+    final String? driverIdStr = await _storage.read(key: _driverIdKey);
+    return driverIdStr != null ? int.tryParse(driverIdStr) : null;
   }
 
    // Deletes the stored token and sacco ID (e.g., on logout)
