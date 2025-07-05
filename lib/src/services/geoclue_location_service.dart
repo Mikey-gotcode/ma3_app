@@ -1,113 +1,66 @@
 // src/services/geoclue_location_service.dart
-import 'package:dbus/dbus.dart';
+
+import 'dart:io';
+
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:flutter/foundation.dart';
+import 'package:logger/logger.dart';
+
+final _logger = Logger();
 
 class GeoclueLocationService {
   static Future<LatLng?> getCurrentLocation() async {
-    final client = DBusClient.system();
-    DBusRemoteObject? geoClient;
-    
     try {
-      // First, check if geoclue service is available
-      final manager = DBusRemoteObject(
-        client,
-        name: 'org.freedesktop.GeoClue2',
-        path: DBusObjectPath('/org/freedesktop/GeoClue2/Manager'),
-      );
-
-      // Call CreateClient to get a client path
-      final reply = await manager.callMethod(
-        'org.freedesktop.GeoClue2.Manager',
-        'CreateClient',
-        [],
-      );
-
-      final clientPath = reply.returnValues[0].asObjectPath();
-      print('GeoclueLocationService: Created client at path: $clientPath');
-
-      geoClient = DBusRemoteObject(
-        client,
-        name: 'org.freedesktop.GeoClue2',
-        path: clientPath,
-      );
-
-      // Set the desktop ID to match our .desktop file
-      await geoClient.setProperty(
-        'org.freedesktop.GeoClue2.Client',
-        'DesktopId',
-        DBusString('ma3_app'),
-      );
-      print('GeoclueLocationService: Set DesktopId to ma3_app');
-
-      // Set distance threshold
-      await geoClient.setProperty(
-        'org.freedesktop.GeoClue2.Client',
-        'DistanceThreshold',
-        DBusUint32(0),
-      );
-
-      // Start the client
-      await geoClient.callMethod(
-        'org.freedesktop.GeoClue2.Client',
-        'Start',
-        [],
-      );
-      print('GeoclueLocationService: Started client');
-
-      // Wait a moment for location to be available
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Get the current location
-      final locationProperty = await geoClient.getProperty(
-        'org.freedesktop.GeoClue2.Client',
-        'Location',
-      );
-      
-      final locationPath = locationProperty.asObjectPath();
-      print('GeoclueLocationService: Got location path: $locationPath');
-
-      // Check if location path is valid (not root path)
-      if (locationPath.value == '/') {
-        print('GeoclueLocationService: Location path is root, no location available yet');
+      if (kIsWeb) {
+        _logger.w("Location not supported on web.");
         return null;
       }
 
-      final location = DBusRemoteObject(
-        client,
-        name: 'org.freedesktop.GeoClue2',
-        path: locationPath,
-      );
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _logger.w("Location services are disabled.");
+        return null;
+      }
 
-      final lat = (await location.getProperty(
-        'org.freedesktop.GeoClue2.Location',
-        'Latitude',
-      )).asDouble();
+    // first check & request the *foreground* permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
 
-      final lon = (await location.getProperty(
-        'org.freedesktop.GeoClue2.Location',
-        'Longitude',
-      )).asDouble();
+      if (permission == LocationPermission.denied) {
+        _logger.w("Foreground location permission denied.");
+        return null;
+      }
 
-      print('GeoclueLocationService: Got location: $lat, $lon');
-      return LatLng(lat, lon);
-      
-    } catch (e) {
-      print('Failed to get location via Geoclue: $e');
-      return null;
-    } finally {
-      // Stop the client if it was created
-      if (geoClient != null) {
-        try {
-          await geoClient.callMethod(
-            'org.freedesktop.GeoClue2.Client',
-            'Stop',
-            [],
-          );
-        } catch (e) {
-          print('Error stopping geoclue client: $e');
+      // On Android Q+ you may need to request background separately:
+      if (Platform.isAndroid) {
+        if (permission == LocationPermission.whileInUse) {
+          // prompt again for background if your use‑case requires it
+          permission = await Geolocator.requestPermission();
+          if (permission != LocationPermission.always) {
+            _logger.w("Background location permission not granted.  Some devices require this.");
+            // you can still continue with whileInUse only if that suffices
+          }
         }
       }
-      await client.close();
+
+      if (permission == LocationPermission.deniedForever) {
+  // takes user to the app’s system settings page
+  await Geolocator.openAppSettings();
+  return null;
+}
+
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.best,
+      );
+
+      return LatLng(position.latitude, position.longitude);
+    } catch (e, stack) {
+      _logger.e('Error getting location', error: e, stackTrace: stack);
+      return null;
     }
   }
 }

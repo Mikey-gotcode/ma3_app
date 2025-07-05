@@ -19,7 +19,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     MapScreen(), // This is the updated MapScreen
     ManagementScreen(),
     ReportsScreen(),
-    ProfileScreen(),
+    AdminProfileScreen(),
   ];
 
   static const List<String> _appBarTitles = <String>[

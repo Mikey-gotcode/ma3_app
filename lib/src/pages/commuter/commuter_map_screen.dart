@@ -225,8 +225,7 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
 
     super.dispose();
   }
-
-  Future<void> _loadCommuterMapData() async {
+ Future<void> _loadCommuterMapData() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
@@ -255,34 +254,83 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
         _routeIdToRouteData[route.id] = route;
 
         List<math_latlong.LatLng> polylinePoints = [];
+        // --- START GEOMETRY PARSING FIX ---
         if (route.geometry.isNotEmpty) {
           try {
+            // Attempt to decode the geometry string.
+            // It could be a LineString, MultiLineString, or a GeometryCollection.
             final Map<String, dynamic> geoJson = json.decode(route.geometry);
-            if (geoJson['type'] == 'LineString' &&
-                geoJson['coordinates'] is List) {
+
+            if (geoJson['type'] == 'LineString' && geoJson['coordinates'] is List) {
               polylinePoints = (geoJson['coordinates'] as List)
                   .map(
                     (coord) => math_latlong.LatLng(
-                      coord[1] as double,
-                      coord[0] as double,
+                      coord[1] as double, // Latitude
+                      coord[0] as double, // Longitude
                     ),
                   )
                   .toList();
+            } else if (geoJson['type'] == 'MultiLineString' && geoJson['coordinates'] is List) {
+              // Handle MultiLineString: multiple LineStrings
+              for (var lineCoords in geoJson['coordinates']) {
+                if (lineCoords is List) {
+                  polylinePoints.addAll(
+                    (lineCoords as List)
+                        .map(
+                          (coord) => math_latlong.LatLng(
+                            coord[1] as double,
+                            coord[0] as double,
+                          ),
+                        )
+                        .toList(),
+                  );
+                }
+              }
+            } else if (geoJson['type'] == 'GeometryCollection' && geoJson['geometries'] is List) {
+              // Handle GeometryCollection: iterate through geometries
+              for (var geometryItem in geoJson['geometries']) {
+                if (geometryItem is Map<String, dynamic> &&
+                    geometryItem['type'] == 'LineString' &&
+                    geometryItem['coordinates'] is List) {
+                  polylinePoints.addAll(
+                    (geometryItem['coordinates'] as List)
+                        .map(
+                          (coord) => math_latlong.LatLng(
+                            coord[1] as double,
+                            coord[0] as double,
+                          ),
+                        )
+                        .toList(),
+                  );
+                }
+                // Extend with other types if necessary (e.g., MultiLineString within collection)
+              }
             } else {
               debugPrint(
-                'Warning: Route ID ${route.id} geometry is not a valid LineString GeoJSON. Falling back to stages.',
+                'Warning: Route ID ${route.id} geometry is an unsupported GeoJSON type or malformed. Type: ${geoJson['type']}. Falling back to stages.',
               );
               polylinePoints = route.stages.map((s) => s.toLatLng()).toList();
             }
-          } catch (e) {
+          } on FormatException catch (e) {
+            // This catches if route.geometry is not a valid JSON string
             debugPrint(
-              'Error parsing geometry for route ID ${route.id} as GeoJSON: $e. Falling back to stages.',
+              'Error decoding geometry string for route ID ${route.id}: $e. Falling back to stages.',
+            );
+            polylinePoints = route.stages.map((s) => s.toLatLng()).toList();
+          } catch (e) {
+            // Catch other parsing errors
+            debugPrint(
+              'Error parsing geometry for route ID ${route.id}: $e. Falling back to stages.',
             );
             polylinePoints = route.stages.map((s) => s.toLatLng()).toList();
           }
         } else {
+          // If geometry string is empty, fall back to stages
+          debugPrint('Route ID ${route.id} has empty geometry. Falling back to stages.');
           polylinePoints = route.stages.map((s) => s.toLatLng()).toList();
         }
+        // --- END GEOMETRY PARSING FIX ---
+
 
         List<double> segmentLengths = [];
         double totalRouteLength = 0.0;
@@ -323,7 +371,7 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
         if (mounted && overallBounds != null) {
           _mapController.fitCamera(
             CameraFit.bounds(
-              bounds: overallBounds!,
+              bounds: overallBounds,
               padding: const EdgeInsets.all(50.0),
             ),
           );
@@ -355,7 +403,7 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
   }
 
   // New method: Fetches all vehicles (no saccoId filter)
-  Future<void> _fetchAllVehicles() async {
+   Future<void> _fetchAllVehicles() async {
     try {
       final List<Vehicle> fetchedVehicles =
           await CommuterService.fetchAllVehicles(); // Using CommuterService
@@ -370,10 +418,9 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
       rethrow;
     }
   }
-
   /// Initialize tracked vehicles from loaded vehicle data
   /// This sets up the initial positions for vehicles and the driver-to-vehicle mapping.
-  Future<void> _initializeTrackedVehicles() async {
+   Future<void> _initializeTrackedVehicles() async {
     _trackedVehicles.clear();
     _vehicleToDriverMap.clear();
 
@@ -396,7 +443,7 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
           ),
         );
 
-        if (driver.id > 0) {
+        if (driver.id > 0) { // Keeping this check as per your instruction
           _vehicleToDriverMap[vehicle.id] = driver.id;
 
           final routeInfo = _routeAnimationInfo[vehicle.routeId];
@@ -416,7 +463,7 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
           );
         } else {
           debugPrint(
-            'Warning: No driver found for vehicle ${vehicle.vehicleRegistration} (ID: ${vehicle.id}). It will not be tracked.',
+            'Warning: No driver found with ID > 0 for vehicle ${vehicle.vehicleRegistration} (ID: ${vehicle.id}). It will not be tracked initially via driverId.',
           );
         }
       }
@@ -429,9 +476,10 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
     }
   }
 
+
   /// Connect to WebSocket for real-time location updates
   /// This method effectively "fetches all active vehicle locations" as they stream in.
-  Future<void> _connectToLocationWebSocket() async {
+   Future<void> _connectToLocationWebSocket() async {
     try {
       final wsUrl = dotenv.env['BACKEND_WS_URL'];
       if (wsUrl == null) {
@@ -559,7 +607,7 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
         );
       }
 
-      trackedVehicle!.updateFromLocationData(locationUpdate);
+      trackedVehicle.updateFromLocationData(locationUpdate);
       debugPrint(
         'Updated vehicle position for driver ${locationUpdate.driverId} (Vehicle ID: ${locationUpdate.vehicleId}): ${locationUpdate.position}',
       );
@@ -671,17 +719,19 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          if (mounted)
+          if (mounted) {
             _showSnackBar('Location permissions are denied', isError: true);
+          }
           return;
         }
       }
       if (permission == LocationPermission.deniedForever) {
-        if (mounted)
+        if (mounted) {
           _showSnackBar(
             'Location permissions are permanently denied, we cannot request permissions.',
             isError: true,
           );
+        }
         return;
       }
 
@@ -1174,7 +1224,7 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
           ),
           if (suggestions.isNotEmpty && controller.text.isNotEmpty)
             ConstrainedBox(
-              constraints: BoxConstraints(
+              constraints: const BoxConstraints(
                 maxHeight: 200,
               ), // Limit height of suggestions
               child: ListView.builder(
@@ -1196,10 +1246,12 @@ class _CommuterMapScreenState extends State<CommuterMapScreen>
                         );
                         if (isStartLocation) {
                           _selectedStartLatLng = latLng;
-                          _startLocationSuggestions = []; // Clear suggestions
+                          _startLocationSuggestions =
+                              []; // Clear suggestions for start location
                         } else {
                           _selectedEndLatLng = latLng;
-                          _endLocationSuggestions = []; // Clear suggestions
+                          _endLocationSuggestions =
+                              []; // Clear suggestions for end location
                         }
                         _mapController.move(
                           latLng,

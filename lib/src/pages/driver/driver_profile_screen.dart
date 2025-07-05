@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:ma3_app/src/services/token_storage.dart';
-import 'package:ma3_app/src/services/auth_service.dart'; // Import the UserService
+import 'package:ma3_app/src/services/auth_service.dart'; // Corrected import to UserService
 
-class CommuterProfileScreen extends StatefulWidget {
-  const CommuterProfileScreen({super.key});
+class DriverProfileScreen extends StatefulWidget {
+  const DriverProfileScreen({super.key});
 
   @override
-  State<CommuterProfileScreen> createState() => _CommuterProfileScreenState();
+  State<DriverProfileScreen> createState() => _DriverProfileScreenState();
 }
 
-class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
-  final AuthService _userService = AuthService();
+class _DriverProfileScreenState extends State<DriverProfileScreen> {
+  final AuthService _userService = AuthService(); // Using UserService
   Map<String, dynamic>? _userProfile;
   bool _isLoading = true;
   String? _errorMessage;
@@ -19,6 +19,11 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+
+  // Controllers for editing Driver details
+  final TextEditingController _driverPhoneController = TextEditingController();
+  final TextEditingController _licenseNumberController = TextEditingController();
+  // Removed: final TextEditingController _saccoIdController = TextEditingController(); // Sacco ID is no longer changeable
 
   // Controllers for changing password
   final TextEditingController _oldPasswordController = TextEditingController();
@@ -36,6 +41,9 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _driverPhoneController.dispose();
+    _licenseNumberController.dispose();
+    // Removed: _saccoIdController.dispose();
     _oldPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmNewPasswordController.dispose();
@@ -51,9 +59,17 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
       final profile = await _userService.getMyProfile();
       setState(() {
         _userProfile = profile;
+        // Populate user fields
         _nameController.text = _userProfile?['name'] ?? '';
         _emailController.text = _userProfile?['email'] ?? '';
         _phoneController.text = _userProfile?['phone'] ?? '';
+
+        // Populate Driver fields
+        if (_userProfile?['driver'] != null) {
+          _driverPhoneController.text = _userProfile!['driver']['phone'] ?? '';
+          _licenseNumberController.text = _userProfile!['driver']['license_number'] ?? '';
+          // Removed: _saccoIdController.text = (_userProfile!['driver']['sacco_id'] ?? 0).toString();
+        }
       });
     } catch (e) {
       setState(() {
@@ -73,6 +89,7 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
     });
     try {
       final Map<String, dynamic> updateData = {};
+      // User fields
       if (_nameController.text != (_userProfile?['name'] ?? '')) {
         updateData['name'] = _nameController.text;
       }
@@ -81,6 +98,21 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
       }
       if (_phoneController.text != (_userProfile?['phone'] ?? '')) {
         updateData['phone'] = _phoneController.text;
+      }
+
+      // Driver fields
+      if (_userProfile?['driver'] != null) {
+        if (_driverPhoneController.text != (_userProfile!['driver']['phone'] ?? '')) {
+          updateData['driver_phone'] = _driverPhoneController.text;
+        }
+        if (_licenseNumberController.text != (_userProfile!['driver']['license_number'] ?? '')) {
+          updateData['license_number'] = _licenseNumberController.text;
+        }
+        // Removed: Logic for updating sacco_id
+        // final int? newSaccoId = int.tryParse(_saccoIdController.text);
+        // if (newSaccoId != null && newSaccoId != (_userProfile!['driver']['sacco_id'] ?? 0)) {
+        //   updateData['sacco_id'] = newSaccoId;
+        // }
       }
 
       if (updateData.isNotEmpty) {
@@ -123,7 +155,7 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
 
     return showDialog<void>(
       context: context,
-      barrierDismissible: false, // User must tap button to close
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Change Password'),
@@ -201,7 +233,7 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Commuter Profile'),
+        title: const Text('Driver Profile'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -239,6 +271,10 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
                             }
                           },
                           child: const Text('Logout'),
+                          style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
                         ),
                       ],
                     ),
@@ -254,8 +290,8 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
                           children: [
                             const CircleAvatar(
                               radius: 50,
-                              backgroundColor: Colors.blueAccent,
-                              child: Icon(Icons.person, size: 60, color: Colors.white),
+                              backgroundColor: Colors.green,
+                              child: Icon(Icons.drive_eta, size: 60, color: Colors.white),
                             ),
                             const SizedBox(height: 16),
                             Text(
@@ -309,6 +345,56 @@ class _CommuterProfileScreenState extends State<CommuterProfileScreen> {
                                 ),
                                 keyboardType: TextInputType.phone,
                               ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Driver Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              const Divider(),
+                              TextFormField(
+                                controller: _driverPhoneController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Driver Phone',
+                                  prefixIcon: Icon(Icons.phone_android),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                                ),
+                                keyboardType: TextInputType.phone,
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _licenseNumberController,
+                                decoration: const InputDecoration(
+                                  labelText: 'License Number',
+                                  prefixIcon: Icon(Icons.badge),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              // Display Sacco Name (read-only) instead of Sacco ID input
+                              if (_userProfile?['driver']?['sacco']?['name'] != null)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.directions_bus, color: Colors.grey),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Assigned Sacco: ${_userProfile!['driver']['sacco']['name']}',
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               const SizedBox(height: 20),
                               Center(
                                 child: ElevatedButton.icon(

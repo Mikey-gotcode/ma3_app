@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ma3_app/src/pages/driver/driver_map_screen.dart'; // Import the new MapScreen
+import 'package:ma3_app/src/pages/driver/driver_profile_screen.dart'; 
 
 // Placeholder screens for other tabs
 class EarningsScreen extends StatelessWidget {
@@ -10,13 +11,6 @@ class EarningsScreen extends StatelessWidget {
   }
 }
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('Profile Screen Content', style: TextStyle(fontSize: 24)));
-  }
-}
 
 
 class DriverHomePage extends StatefulWidget {
@@ -32,7 +26,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
   static const List<Widget> _widgetOptions = <Widget>[
     MapScreen(),      // Your map screen with the toggle
     EarningsScreen(), // Placeholder for earnings
-    ProfileScreen(),  // Placeholder for profile
+    DriverProfileScreen(),  // Placeholder for profile
   ];
 
   void _onItemTapped(int index) {

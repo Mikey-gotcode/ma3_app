@@ -281,7 +281,7 @@ class _SaccoMapScreenState extends State<SaccoMapScreen> with SingleTickerProvid
         if (mounted && overallBounds != null) {
           _mapController.fitCamera(
             CameraFit.bounds(
-              bounds: overallBounds!,
+              bounds: overallBounds,
               padding: const EdgeInsets.all(50.0),
             ),
           );
@@ -435,21 +435,18 @@ class _SaccoMapScreenState extends State<SaccoMapScreen> with SingleTickerProvid
       final Map<String, dynamic> data = json.decode(message);
       final locationUpdate = VehicleLocationUpdate.fromJson(data);
       
+      // Use driverId from the incoming update to find the tracked vehicle
       final trackedVehicle = _trackedVehicles[locationUpdate.driverId];
       if (trackedVehicle != null) {
         trackedVehicle.updateFromLocationData(locationUpdate);
-        debugPrint('Updated vehicle position for driver ${locationUpdate.driverId}: ${locationUpdate.position}');
+        debugPrint('Updated vehicle position for driver ${locationUpdate.driverId} (Vehicle ID: ${locationUpdate.vehicleId}): ${locationUpdate.position}');
         
-        // Trigger UI update
-        // setState is called by the central _animationUpdateTimer,
-        // so direct setState here might not be strictly necessary for animation,
-        // but it ensures immediate reaction for non-animated updates or data changes.
-        // if (mounted) {
-        //   setState(() {});
-        // }
+        // No need for direct setState here, _animationUpdateTimer handles UI updates
       } else {
         debugPrint('Received location update for unknown driver: ${locationUpdate.driverId}. Vehicle ID: ${locationUpdate.vehicleId}');
         // Optionally, fetch vehicle/driver info for unknown drivers and add to _trackedVehicles
+        // This could happen if a driver logs in after the map screen is loaded.
+        // For now, we just log it.
       }
     } catch (e) {
       debugPrint('Error handling location update: $e');

@@ -20,7 +20,7 @@ class Driver {
 
   factory Driver.fromJson(Map<String, dynamic> json) {
     // Extract top-level driver-specific fields directly
-    final int driverId = json['ID'] as int; // Assuming 'ID' is the Driver's ID
+    final int driverId = (json['ID'] as int); // Assuming 'ID' is the Driver's ID
     final String driverName = json['name'] as String; // Driver's name
     final String? driverLicenseNumber = json['license_number'] as String?;
     final String? driverPhone = json['phone'] as String?; // Driver's phone

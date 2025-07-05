@@ -35,6 +35,7 @@ dependencies:
   web_socket_channel: ^2.4.0
   flutter_map: ^6.1.0 # Add this
   geolocator: ^12.0.0 # For location services
+  logger: ^2.0.2
   geolocator_linux: ^0.2.0 # Optional but necessary for Linux builds
   latlong2: ^0.9.1 # Add this for LatLng
   flutter_secure_storage: ^9.0.0 # Add this line
@@ -50,6 +51,15 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.14
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

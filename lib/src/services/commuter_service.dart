@@ -23,22 +23,27 @@ class CommuterService {
   }
 
   // --- Methods to fetch initial data (Vehicles and Routes) for ALL ---
-  // These methods now fetch all vehicles/routes/drivers, not filtered by saccoId.
+  // These methods now fetch all vehicles/routes/drivers from the new /commuter prefixed endpoints.
   // Your backend must expose corresponding endpoints that are accessible to the 'commuter' role.
   static Future<List<Vehicle>> fetchAllVehicles() async {
     if (_backendBaseUrl == null) {
       throw Exception('BACKEND_BASE_URL is not configured in .env');
     }
 
-    final url = Uri.parse('$_backendBaseUrl/vehicles'); // Changed URL: removed /sacco/$saccoId
+    // UPDATED URL to hit the new /commuter/vehicles endpoint
+    final url = Uri.parse('$_backendBaseUrl/commuter/vehicles'); 
     final headers = await _getAuthHeaders();
 
     try {
       final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
-        List<dynamic> body = json.decode(response.body);
-        return body.map((dynamic item) => Vehicle.fromJson(item)).toList();
+        // --- MODIFIED PARSING LOGIC HERE ---
+        final Map<String, dynamic> responseBody = json.decode(response.body);
+        // Assuming the list of vehicles is under a key like 'data' or 'vehicles'
+        // Adjust 'data' to the actual key your backend uses if different.
+        final List<dynamic> vehicleList = responseBody['data'] ?? responseBody['vehicles'] ?? []; 
+        return vehicleList.map((dynamic item) => Vehicle.fromJson(item)).toList();
       } else {
         throw Exception('Failed to load all vehicles: ${response.statusCode} - ${response.body}');
       }
@@ -52,15 +57,18 @@ class CommuterService {
       throw Exception('BACKEND_BASE_URL is not configured in .env');
     }
 
-    final url = Uri.parse('$_backendBaseUrl/routes'); // Changed URL: removed /sacco/$saccoId
+    // UPDATED URL to hit the new /commuter/routes endpoint
+    final url = Uri.parse('$_backendBaseUrl/commuter/routes'); 
     final headers = await _getAuthHeaders();
 
     try {
       final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
-        List<dynamic> body = json.decode(response.body);
-        return body.map((dynamic item) => RouteData.fromJson(item)).toList();
+        // --- ADDED PARSING LOGIC HERE (similar to fetchAllVehicles) ---
+        final Map<String, dynamic> responseBody = json.decode(response.body);
+        final List<dynamic> routeList = responseBody['data'] ?? responseBody['routes'] ?? []; 
+        return routeList.map((dynamic item) => RouteData.fromJson(item)).toList();
       } else {
         throw Exception('Failed to load all routes: ${response.statusCode} - ${response.body}');
       }
@@ -74,15 +82,18 @@ class CommuterService {
       throw Exception('BACKEND_BASE_URL is not configured in .env');
     }
 
-    final url = Uri.parse('$_backendBaseUrl/drivers'); // Changed URL: removed /sacco/$saccoId
+    // UPDATED URL to hit the new /commuter/drivers endpoint
+    final url = Uri.parse('$_backendBaseUrl/commuter/drivers'); 
     final headers = await _getAuthHeaders();
 
     try {
       final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
-        List<dynamic> body = json.decode(response.body);
-        return body.map((dynamic item) => Driver.fromJson(item)).toList();
+        // --- ADDED PARSING LOGIC HERE (similar to fetchAllVehicles) ---
+        final Map<String, dynamic> responseBody = json.decode(response.body);
+        final List<dynamic> driverList = responseBody['data'] ?? responseBody['drivers'] ?? []; 
+        return driverList.map((dynamic item) => Driver.fromJson(item)).toList();
       } else {
         throw Exception('Failed to load all drivers: ${response.statusCode} - ${response.body}');
       }
@@ -91,7 +102,7 @@ class CommuterService {
     }
   }
 
-  // --- Methods for Location Search and Route Finding (Requires Backend/External API) ---
+  // --- Methods for Location Search and Route Finding (ORS and Backend) ---
 
   /// Searches for places using OpenRouteService (ORS) Geocoding API.
   /// Returns a list of maps, each containing 'name', 'latitude', and 'longitude'.
@@ -102,13 +113,11 @@ class CommuterService {
     }
 
     // Construct the ORS Geocoding API URL
-    // Documentation: https://openrouteservice.org/dev/#/api-docs/geocode/search/get
     final Map<String, String> queryParams = {
       'api_key': _orsApiKey!,
       'text': query,
     };
     if (near != null) {
-      // Add focus point for better results near a specific location
       queryParams['focus.point.lat'] = near.latitude.toString();
       queryParams['focus.point.lon'] = near.longitude.toString();
     }
@@ -144,52 +153,121 @@ class CommuterService {
   // Placeholder for a route finding API that handles multi-leg routes
   // This method would typically call your backend to perform the 1-way, 2-way, 3-way logic.
   // The backend would then return the optimal route as a list of RouteData objects or polylines.
-  static Future<List<RouteData>> findOptimalRoute(LatLng start, LatLng end) async {
-    // This is a placeholder. Your backend needs to implement the complex route search logic.
-    // It would take start/end coordinates and return the optimal route(s).
-    await Future.delayed(const Duration(milliseconds: 500)); // Simulate network delay
-
-    // Dummy response: Return a direct route if available, otherwise empty.
-    final dummyRoutePoints = [
-      start,
-      math_latlong.LatLng((start.latitude + end.latitude) / 2, (start.longitude + end.longitude) / 2),
-      end,
-    ];
-
-    final dummyRoute = RouteData(
-      id: 999, // Dummy ID
-      name: 'Direct Route from ${start.latitude.toStringAsFixed(2)},${start.longitude.toStringAsFixed(2)} to ${end.latitude.toStringAsFixed(2)},${end.longitude.toStringAsFixed(2)}',
-      geometry: json.encode({
-        'type': 'LineString',
-        'coordinates': dummyRoutePoints.map((p) => [p.longitude, p.latitude]).toList(),
-      }),
-      stages: [], 
-      description: "",//fix descrpition place ho
-    );
-
-    return [dummyRoute]; 
-
-    // Real implementation (assuming backend endpoint /commuter/find-route):
-    /*
-    if (_backendBaseUrl == null) {
-      throw Exception('BACKEND_BASE_URL is not configured in .env');
+ 
+  // --- NEW: Function to get route geometry from OpenRouteService ---
+  // --- MODIFIED: Function to get route geometry from OpenRouteService ---
+  static Future<String?> _getRouteGeometryFromORS(
+      math_latlong.LatLng start, math_latlong.LatLng end) async {
+    if (_orsApiKey == null || _orsApiKey!.isEmpty || _orsApiKey == 'YOUR_ORS_API_KEY') {
+      print('Error: OpenRouteService API Key is not configured.');
+      return null;
     }
-    final url = Uri.parse('$_backendBaseUrl/commuter/find-route');
+
+    final String url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson'; // Base URL for POST
+
+    final Map<String, dynamic> requestBody = {
+      "coordinates": [
+        [start.longitude, start.latitude],
+        [end.longitude, end.latitude]
+      ],
+      "radiuses": [-1, -1] // Optional: no radius constraint for start/end points
+    };
+
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Authorization': _orsApiKey!, // ORS API Key goes in the Authorization header
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, application/geo+json, application/gpx+xml, application/polyline, application/json; charset=utf-8', // Added Accept header
+        },
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        if (data['features'] != null && data['features'].isNotEmpty) {
+          return json.encode(data['features'][0]['geometry']);
+        } else {
+          print('No routable path found from ORS.');
+          return null;
+        }
+      } else {
+        String errorMsg = 'ORS Routing failed: ${response.statusCode}';
+        try {
+          final errorData = json.decode(response.body);
+          if (errorData['error'] != null && errorData['error']['message'] != null) {
+            errorMsg += ' - ORS Error: ${errorData['error']['message']}';
+          } else {
+            errorMsg += ' - ${response.body}';
+          }
+        } catch (_) {
+          errorMsg += ' - ${response.body}';
+        }
+        print(errorMsg);
+        return null;
+      }
+    } catch (e) {
+      print('Error during ORS routing: $e');
+      return null;
+    }
+  }
+
+
+  // --- MODIFIED: findOptimalRoute to first query ORS then send to backend ---
+  static Future<List<RouteData>> findOptimalRoute(
+      math_latlong.LatLng start, math_latlong.LatLng end) async {
+    if (_backendBaseUrl!.isEmpty) {
+      throw Exception('BACKEND_BASE_URL is not configured');
+    }
+
+    // Step 1: Get optimal route geometry from OpenRouteService
+    print('Attempting to get route geometry from ORS...');
+    final String? orsGeometry = await _getRouteGeometryFromORS(start, end);
+
+    if (orsGeometry == null) {
+      throw Exception('Failed to generate an optimal route from OpenRouteService.');
+    }
+    print('Successfully got ORS geometry. Submitting to backend...');
+
+    // Step 2: Submit the ORS generated geometry to your backend
+    final url = Uri.parse('$_backendBaseUrl/commuter/routes/find-optimal');
     final headers = await _getAuthHeaders();
     final body = json.encode({
-      'start_lat': start.latitude,
+      'start_lat': start.latitude, // Still useful for context or fallback
       'start_lon': start.longitude,
-      'end_lat': end.latitude,
+      'end_lat': end.latitude,     // Still useful for context or fallback
       'end_lon': end.longitude,
+      'optimal_geometry_geojson': orsGeometry, // NEW: Send the GeoJSON string
     });
 
-    final response = await http.post(url, headers: headers, body: body);
-    if (response.statusCode == 200) {
-      List<dynamic> responseBody = json.decode(response.body);
-      return responseBody.map((item) => RouteData.fromJson(item)).toList();
-    } else {
-      throw Exception('Failed to find optimal route: ${response.statusCode} - ${response.body}');
+    try {
+      final response = await http.post(url, headers: headers, body: body);
+
+      if (response.statusCode == 200) {
+       final Map<String, dynamic> responseMap = json.decode(response.body);
+        if (responseMap.containsKey('data') && responseMap['data'] is List) {
+          List<dynamic> responseList = responseMap['data'];
+          return responseList.map((item) => RouteData.fromJson(item)).toList();
+        } else {
+          // Handle cases where 'data' key is missing or not a List
+          throw Exception('Backend response structure invalid: Missing "data" list.');
+        }
+      } else {
+        String errorDetail = response.body;
+        try {
+          final errorJson = json.decode(response.body);
+          if (errorJson['error'] != null) {
+            errorDetail = errorJson['error'];
+          }
+        } catch (_) {
+          // ignore parsing error
+        }
+        throw Exception(
+            'Failed to find optimal route from backend: ${response.statusCode} - $errorDetail');
+      }
+    } catch (e) {
+      throw Exception('Error connecting to backend for optimal route: $e');
     }
-    */
   }
 }

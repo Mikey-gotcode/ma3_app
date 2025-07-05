@@ -182,6 +182,91 @@ class AuthService {
       return {'success': false, 'message': 'An error occurred: $e'};
     }
   }
+   Future<Map<String, dynamic>> getMyProfile() async {
+    final token = await TokenStorage.getToken();
+    if (token == null) {
+      throw Exception('Authentication token not found. Please log in again.');
+    }
+
+    final response = await http.get(
+      Uri.parse('$_backendUrl/api/profile'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      // Decode the response body and return the 'user' map
+      return json.decode(response.body)['user'];
+    } else {
+      // Handle API errors and provide a descriptive message
+      final errorBody = json.decode(response.body);
+      throw Exception('Failed to load profile: ${errorBody['error'] ?? response.statusCode}');
+    }
+  }
+
+  /// Updates the current authenticated user's profile details.
+  ///
+  /// [data] is a map containing the fields to be updated.
+  /// Throws an [Exception] if the token is not found or the API call fails.
+  Future<Map<String, dynamic>> updateUserDetails(Map<String, dynamic> data) async {
+    final token = await TokenStorage.getToken();
+    if (token == null) {
+      throw Exception('Authentication token not found. Please log in again.');
+    }
+
+    final response = await http.patch( // Using PATCH for partial updates
+      Uri.parse('$_backendUrl/api/profile'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(data),
+    );
+
+    if (response.statusCode == 200) {
+      // Decode the response body and return the updated 'user' map
+      return json.decode(response.body)['user'];
+    } else {
+      // Handle API errors
+      final errorBody = json.decode(response.body);
+      throw Exception('Failed to update profile: ${errorBody['error'] ?? response.statusCode}');
+    }
+  }
+
+  /// Changes the current authenticated user's password.
+  ///
+  /// [oldPassword] is the current password for verification.
+  /// [newPassword] is the new password.
+  /// Throws an [Exception] if the token is not found or the API call fails.
+  Future<void> changePassword(String oldPassword, String newPassword) async {
+    final token = await TokenStorage.getToken();
+    if (token == null) {
+      throw Exception('Authentication token not found. Please log in again.');
+    }
+
+    final response = await http.put( // Using PUT for password change
+      Uri.parse('$_backendUrl/api/change-password'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({
+        'old_password': oldPassword,
+        'new_password': newPassword,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      // Password changed successfully, no specific data to return
+      return;
+    } else {
+      // Handle API errors
+      final errorBody = json.decode(response.body);
+      throw Exception('Failed to change password: ${errorBody['error'] ?? response.statusCode}');
+    }
+  }
 
   // Logout method
   static Future<void> logout() async {
